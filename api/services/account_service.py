@@ -1309,8 +1309,20 @@ class RegisterService:
         is_setup: bool | None = False,
         create_workspace_required: bool | None = True,
     ) -> Account:
-        db.session.begin_nested()
         """Register account"""
+        # [Classroom Mode] Whitelist Check - MUST be before create_account() to prevent unauthorized registration
+        system_features = FeatureService.get_system_features()
+        if system_features.classroom_mode:
+            allowed_list = []
+            if system_features.classroom_teachers:
+                allowed_list.extend([e.strip() for e in system_features.classroom_teachers.split(',')])
+            if system_features.classroom_student_whitelist:
+                allowed_list.extend([e.strip() for e in system_features.classroom_student_whitelist.split(',')])
+            
+            if email not in allowed_list:
+                raise AccountRegisterError("Classroom Mode: Registration is restricted to enrolled students and teachers.")
+
+        db.session.begin_nested()
         try:
             account = AccountService.create_account(
                 email=email,
@@ -1319,18 +1331,6 @@ class RegisterService:
                 password=password,
                 is_setup=is_setup,
             )
-            
-            # [Classroom Mode] Whitelist Check
-            system_features = FeatureService.get_system_features()
-            if system_features.classroom_mode:
-                allowed_list = []
-                if system_features.classroom_teachers:
-                    allowed_list.extend([e.strip() for e in system_features.classroom_teachers.split(',')])
-                if system_features.classroom_student_whitelist:
-                    allowed_list.extend([e.strip() for e in system_features.classroom_student_whitelist.split(',')])
-                
-                if email not in allowed_list:
-                     raise AccountRegisterError("Classroom Mode: Registration is restricted to enrolled students and teachers.")
 
             account.status = status or AccountStatus.ACTIVE
             account.initialized_at = naive_utc_now()

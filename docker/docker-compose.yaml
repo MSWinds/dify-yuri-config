@@ -713,6 +713,10 @@ services:
       PLUGIN_MAX_PACKAGE_SIZE: ${PLUGIN_MAX_PACKAGE_SIZE:-52428800}
       PLUGIN_DAEMON_TIMEOUT: ${PLUGIN_DAEMON_TIMEOUT:-600.0}
       INNER_API_KEY_FOR_PLUGIN: ${PLUGIN_DIFY_INNER_API_KEY:-QaHbTe77CtuXmsfyhR7+vRjI/+XbV1AaFy691iy+kGDv2Jvy0/eAh8Y1}
+      PYTHONUNBUFFERED: '1'
+      EXPOSE_IMGS_URL: ${EXPOSE_IMGS_URL:-}
+      MAIL_TYPE: ${MAIL_TYPE:-}
+      MAIL_DEFAULT_SEND_FROM: ${MAIL_DEFAULT_SEND_FROM:-}
     depends_on:
       init_permissions:
         condition: service_completed_successfully
@@ -730,12 +734,6 @@ services:
         required: false
       redis:
         condition: service_started
-    environment:
-      <<: *shared-api-worker-env
-      PYTHONUNBUFFERED: '1'
-      EXPOSE_IMGS_URL: ${EXPOSE_IMGS_URL:-}
-      MAIL_TYPE: ${MAIL_TYPE:-}
-      MAIL_DEFAULT_SEND_FROM: ${MAIL_DEFAULT_SEND_FROM:-}
     volumes:
       # Mount the storage directory to the container, for storing user files.
       - ./volumes/app/storage:/app/api/storage
