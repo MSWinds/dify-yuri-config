@@ -828,7 +828,18 @@ services:
 
   # Frontend web application.
   web:
-    image: langgenius/dify-web:1.11.2
+    # Use local build instead of official image to enable UI customization
+    build:
+      context: ../web
+      dockerfile: Dockerfile
+      # Use BuildKit for faster builds and better caching
+      cache_from:
+        - type=local,src=/tmp/.buildx-cache
+      # Build args for optimization
+      args:
+        - NODE_OPTIONS=--max-old-space-size=4096
+    # Fallback to official image if build fails (uncomment to use official image)
+    # image: langgenius/dify-web:1.11.2
     restart: always
     environment:
       CONSOLE_API_URL: ${CONSOLE_API_URL:-}
