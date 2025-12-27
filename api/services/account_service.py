@@ -1319,6 +1319,19 @@ class RegisterService:
                 password=password,
                 is_setup=is_setup,
             )
+            
+            # [Classroom Mode] Whitelist Check
+            system_features = FeatureService.get_system_features()
+            if system_features.classroom_mode:
+                allowed_list = []
+                if system_features.classroom_teachers:
+                    allowed_list.extend([e.strip() for e in system_features.classroom_teachers.split(',')])
+                if system_features.classroom_student_whitelist:
+                    allowed_list.extend([e.strip() for e in system_features.classroom_student_whitelist.split(',')])
+                
+                if email not in allowed_list:
+                     raise AccountRegisterError("Classroom Mode: Registration is restricted to enrolled students and teachers.")
+
             account.status = status or AccountStatus.ACTIVE
             account.initialized_at = naive_utc_now()
 
@@ -1357,6 +1370,15 @@ class RegisterService:
     ) -> str:
         if not inviter:
             raise ValueError("Inviter is required")
+
+        # [Classroom Mode] Block Invitations
+        system_features = FeatureService.get_system_features()
+        if system_features.classroom_mode:
+            teachers = [e.strip() for e in system_features.classroom_teachers.split(',')] if system_features.classroom_teachers else []
+            if inviter.email not in teachers:
+                # We raise a ValueError or appropriate exception that the frontend will show
+                # Using ValueError is safe as it propagates to API error handler
+                raise ValueError("Classroom Mode: Students cannot invite members. Please contact your instructor.")
 
         """Invite new member"""
         with Session(db.engine) as session:

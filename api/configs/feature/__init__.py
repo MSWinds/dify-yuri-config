@@ -16,6 +16,28 @@ from pydantic_settings import BaseSettings
 from .hosted_service import HostedServiceConfig
 
 
+class ClassroomConfig(BaseSettings):
+    """
+    Classroom configuration
+    """
+
+    # Classroom Mode
+    CLASSROOM_MODE: bool = Field(
+        description="Enable Classroom Mode (isolation & supervision)",
+        default=False,
+    )
+
+    CLASSROOM_TEACHERS: str = Field(
+        description="Comma-separated list of teacher emails to auto-add as admins",
+        default="",
+    )
+
+    CLASSROOM_STUDENT_WHITELIST: str = Field(
+        description="Comma-separated list of allowed student emails (if empty, allow all)",
+        default="",
+    )
+
+
 class SecurityConfig(BaseSettings):
     """
     Security-related configurations for the application
@@ -1223,11 +1245,11 @@ class LoginConfig(BaseSettings):
     )
     ALLOW_REGISTER: bool = Field(
         description="whether to enable register",
-        default=False,
+        default=True,
     )
     ALLOW_CREATE_WORKSPACE: bool = Field(
         description="whether to enable create workspace",
-        default=False,
+        default=True,
     )
 
 
@@ -1290,6 +1312,7 @@ class FeatureConfig(
     AppExecutionConfig,
     AuthConfig,  # Changed from OAuthConfig to AuthConfig
     BillingConfig,
+    ClassroomConfig,
     CodeExecutionSandboxConfig,
     TriggerConfig,
     AsyncWorkflowConfig,

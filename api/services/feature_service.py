@@ -160,8 +160,8 @@ class SystemFeatureModel(BaseModel):
     enable_email_code_login: bool = False
     enable_email_password_login: bool = True
     enable_social_oauth_login: bool = False
-    is_allow_register: bool = False
-    is_allow_create_workspace: bool = False
+    is_allow_register: bool = True
+    is_allow_create_workspace: bool = True
     is_email_setup: bool = False
     license: LicenseModel = LicenseModel()
     branding: BrandingModel = BrandingModel()
@@ -169,6 +169,11 @@ class SystemFeatureModel(BaseModel):
     plugin_installation_permission: PluginInstallationPermissionModel = PluginInstallationPermissionModel()
     enable_change_email: bool = True
     plugin_manager: PluginManagerModel = PluginManagerModel()
+
+    # Classroom Mode Configuration
+    classroom_mode: bool = False
+    classroom_teachers: str = ""
+    classroom_student_whitelist: str = ""
 
 
 class FeatureService:
@@ -224,6 +229,11 @@ class FeatureService:
         system_features.is_allow_register = dify_config.ALLOW_REGISTER
         system_features.is_allow_create_workspace = dify_config.ALLOW_CREATE_WORKSPACE
         system_features.is_email_setup = dify_config.MAIL_TYPE is not None and dify_config.MAIL_TYPE != ""
+        
+        # Classroom Mode
+        system_features.classroom_mode = dify_config.CLASSROOM_MODE
+        system_features.classroom_teachers = dify_config.CLASSROOM_TEACHERS
+        system_features.classroom_student_whitelist = dify_config.CLASSROOM_STUDENT_WHITELIST
 
     @classmethod
     def _fulfill_params_from_env(cls, features: FeatureModel):

@@ -84,7 +84,9 @@ class LoginApi(Resource):
     @setup_required
     @email_password_login_enabled
     @console_ns.expect(console_ns.models[LoginPayload.__name__])
-    @decrypt_password_field
+    # NOTE: @decrypt_password_field removed for compatibility with dify-web:1.11.1
+    # The 1.11.1 web image doesn't have password encryption (added in PR #29659 after 1.11.1)
+    # Re-enable this when upgrading to a newer web image that includes encryption
     def post(self):
         """Authenticate user and login."""
         args = LoginPayload.model_validate(console_ns.payload)
@@ -93,6 +95,7 @@ class LoginApi(Resource):
             raise AccountInFreezeError()
 
         is_login_error_rate_limit = AccountService.is_login_error_rate_limit(args.email)
+        
         if is_login_error_rate_limit:
             raise EmailPasswordLoginLimitError()
 
@@ -115,6 +118,7 @@ class LoginApi(Resource):
         except services.errors.account.AccountPasswordError:
             AccountService.add_login_error_rate_limit(args.email)
             raise AuthenticationFailedError()
+
         # SELF_HOSTED only have one workspace
         tenants = TenantService.get_join_tenants(account)
         if len(tenants) == 0:

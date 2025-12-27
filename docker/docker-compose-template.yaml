@@ -56,6 +56,7 @@ services:
     volumes:
       # Mount the storage directory to the container, for storing user files.
       - ./volumes/app/storage:/app/api/storage
+      - ../scripts:/app/scripts
     networks:
       - ssrf_proxy_network
       - default
@@ -95,6 +96,7 @@ services:
     volumes:
       # Mount the storage directory to the container, for storing user files.
       - ./volumes/app/storage:/app/api/storage
+      - ../scripts:/app/scripts
     networks:
       - ssrf_proxy_network
       - default
@@ -165,6 +167,8 @@ services:
     profiles:
       - postgresql
     restart: always
+    ports:
+      - "${EXPOSE_DB_PORT:-5432}:5432"
     environment:
       POSTGRES_USER: ${DB_USERNAME:-postgres}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-difyai123456}
