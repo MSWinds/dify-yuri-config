@@ -20,18 +20,20 @@ const config = {
           800: '#1d2939',
           900: '#101828',
         },
+        // CGU Red color palette - replacing default blue
+        // Main: #AF1D27, Dark: #8C1720
         primary: {
-          25: '#f5f8ff',
-          50: '#eff4ff',
-          100: '#d1e0ff',
-          200: '#b2ccff',
-          300: '#84adff',
-          400: '#528bff',
-          500: '#2970ff',
-          600: '#155eef',
-          700: '#004eeb',
-          800: '#0040c1',
-          900: '#00359e',
+          25: '#fef5f5', // lightest red tint
+          50: '#fdeaea',
+          100: '#fbd5d5',
+          200: '#f5a8ab',
+          300: '#ed7378',
+          400: '#e04046',
+          500: '#c72a32', // mid-tone
+          600: '#AF1D27', // CGU Red - main brand color
+          700: '#8C1720', // CGU Red - dark variant
+          800: '#6b1118',
+          900: '#4a0c11', // darkest
         },
         blue: {
           500: '#E1EFFE',
