@@ -31,15 +31,22 @@ Only allow pre-approved students and teachers to register.
 
 ### What
 - **File**: `api/services/account_service.py` (`RegisterService.register`)
-- **Added**: Whitelist check before account creation
+- **Added**: Whitelist check **at the beginning** of the method, before `create_account()`
 
 ### How
 ```python
+# MUST be before create_account() - it has internal commit!
 if system_features.classroom_mode:
     allowed_list = teachers + students
     if email not in allowed_list:
         raise AccountRegisterError("Registration restricted...")
+
+# Only then create account
+account = AccountService.create_account(...)
 ```
+
+### ⚠️ Critical Note
+The whitelist check **must happen before** `create_account()` because `create_account()` has an internal `db.session.commit()`. If the check is placed after, the account will already be created in the database before the check runs.
 
 ### Risks
 Medium - `RegisterService.register` may change upstream. Check this method on each merge.
@@ -73,7 +80,7 @@ Medium - event system changes could break this. Verify `tenant_was_created` even
 Prevent students from inviting unauthorized users.
 
 ### What
-- **File**: `api/services/account_service.py` (`InviteService.invite_new_member`)
+- **File**: `api/services/account_service.py` (`RegisterService.invite_new_member`)
 - **Added**: Check if inviter is in `CLASSROOM_TEACHERS`
 
 ### How
@@ -146,20 +153,18 @@ High - volume mounts can cause issues if code structure changes.
 
 ---
 
-## 8. Password Encryption Compatibility Fix
+## 8. Password Encryption (1.11.2+)
 
-### Why
-Web image 1.11.1 doesn't have password encryption (PR #29659 merged after 1.11.1).
+### Status
+**Enabled** - Using `@decrypt_password_field` decorator on login endpoint.
 
 ### What
 - **File**: `api/controllers/console/auth/login.py`
-- **Removed**: `@decrypt_password_field` decorator from login endpoint
+- `@decrypt_password_field` decorator is active
 
-### How
-Commented out the decorator with explanation.
-
-### Risks
-Low - re-enable when web image is updated to include encryption.
+### Note
+This was disabled for 1.11.1 compatibility but re-enabled for 1.11.2+.
+If you ever downgrade to an older web image, you may need to remove this decorator.
 
 ---
 
@@ -201,7 +206,7 @@ Before marking a version stable:
 
 - [ ] Teacher can register
 - [ ] Whitelisted student can register
-- [ ] Non-whitelisted email cannot register
+- [ ] Non-whitelisted email **cannot** register (blocked before account creation)
 - [ ] Student workspace created on registration
 - [ ] Teachers auto-added to student workspace as admin
 - [ ] Student cannot invite members
@@ -212,4 +217,3 @@ Before marking a version stable:
 ---
 
 *Last updated: 2025-12-26*
-

@@ -14,9 +14,8 @@ This is a fork of [Dify](https://github.com/langgenius/dify) customized for **cl
 
 | Branch | Purpose |
 |--------|---------|
-| `main` | Tracks upstream Dify main branch |
-| `school-stable` | Production-ready classroom version (only tested, stable changes) |
-| `school-dev` | Development branch for merging upstream + resolving conflicts |
+| `school-stable` | **Production branch** - Deploy from this. Only tested, stable changes. |
+| `main` | Testing branch for merging upstream updates and resolving conflicts |
 
 ## 🏷️ Tagging Convention
 
@@ -33,20 +32,18 @@ Tag when:
 # 1. Fetch upstream
 git fetch upstream
 
-# 2. Update tracking branch
+# 2. Test merge on main branch
 git checkout main
 git merge upstream/main
 
-# 3. Merge to dev and resolve conflicts
-git checkout school-dev
-git merge main
+# 3. Resolve conflicts if any, then test thoroughly
 
-# 4. Test thoroughly
-
-# 5. If stable, merge to school-stable and tag
+# 4. If stable, merge to school-stable and tag
 git checkout school-stable
-git merge school-dev
+git merge main
 git tag school-YYYY-MM-DD
+git push origin school-stable
+git push origin school-YYYY-MM-DD
 ```
 
 ## 📁 Key Documentation
@@ -54,23 +51,40 @@ git tag school-YYYY-MM-DD
 | Document | Description |
 |----------|-------------|
 | [CLASSROOM_CHANGES.md](./CLASSROOM_CHANGES.md) | All customization details |
-| [DEPLOYMENT.md](./DEPLOYMENT.md) | Docker deployment guide |
 
-## ⚠️ Known Compatibility Notes
+## ⚠️ Version Compatibility
 
-### Web Image Version Mismatch
+### Current Version: 1.11.2
 
-As of 2025-12-26:
-- **Docker web image**: `langgenius/dify-web:1.11.1`
-- **Upstream main**: includes PR #29659 (password encryption)
+As of 2025-12-26, we are using:
+- `langgenius/dify-api:1.11.2`
+- `langgenius/dify-web:1.11.2`
+- `langgenius/dify-plugin-daemon:0.5.2-local`
 
-The 1.11.1 web image does NOT include password encryption. If you update API code beyond 1.11.1, ensure:
-1. Remove `@decrypt_password_field` from login endpoint, OR
-2. Build custom web image with latest code
+The 1.11.2 release includes password encryption (PR #29659), so `@decrypt_password_field` is enabled.
 
-See `api/controllers/console/auth/login.py` for current workaround.
+### When Upgrading
+
+1. Check if `docker-compose.yaml` image versions changed
+2. Compare `.env.example` for new required variables
+3. Verify classroom-related files weren't modified upstream (see CLASSROOM_CHANGES.md)
+
+## 🔧 Environment Backup
+
+Always backup `.env` before upgrades:
+```bash
+cp docker/.env docker/.env.backup.$(date +%Y-%m-%d)
+```
+
+Key classroom variables to preserve:
+```bash
+CLASSROOM_MODE=true
+CLASSROOM_TEACHERS=teacher1@school.edu,teacher2@school.edu
+CLASSROOM_STUDENT_WHITELIST=student1@school.edu,student2@school.edu
+ALLOW_REGISTER=true
+ALLOW_CREATE_WORKSPACE=true
+```
 
 ## 👥 Maintainers
 
 - Yuri (kaijie.yu@cgu.edu)
-
