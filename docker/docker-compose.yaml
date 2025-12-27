@@ -865,6 +865,10 @@ services:
       ENABLE_WEBSITE_JINAREADER: ${ENABLE_WEBSITE_JINAREADER:-true}
       ENABLE_WEBSITE_FIRECRAWL: ${ENABLE_WEBSITE_FIRECRAWL:-true}
       ENABLE_WEBSITE_WATERCRAWL: ${ENABLE_WEBSITE_WATERCRAWL:-true}
+    volumes:
+      # Mount local web public directory for static assets (images, etc.)
+      # Note: For code changes, you still need to rebuild: docker-compose build web
+      - ../web/public:/app/web/public
 
   # The PostgreSQL database.
   db_postgres:

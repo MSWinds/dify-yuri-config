@@ -4,6 +4,12 @@
 
 已将 `docker/docker-compose.yaml` 中的 web 服务从官方镜像改为本地源码构建，支持完全自定义前端。
 
+**📚 文档导航**：
+- [🚀 5 分钟快速入门](./GETTING_STARTED.md) - 新手必读，快速上手
+- [📖 文档总览](./SUMMARY.md) - 所有文档的索引和学习路径
+- [🛡️ 安全的本地开发指南](./SAFE_LOCAL_DEV.md) - 详细的开发流程和最佳实践 ⭐
+- [⚡ 快速参考卡片](./QUICK_REFERENCE.md) - 常用命令和配置速查
+
 ```yaml
 web:
   build:
@@ -16,6 +22,33 @@ web:
 **代价**：首次构建需要 5-10 分钟
 
 ## 🚀 快速命令
+
+### 使用开发脚本（推荐）
+
+```bash
+# 首次设置
+./scripts/dev-web.sh setup
+
+# 启动开发服务器
+./scripts/dev-web.sh dev
+
+# 代码检查
+./scripts/dev-web.sh check
+
+# 运行测试
+./scripts/dev-web.sh test
+
+# 部署到 Docker
+./scripts/dev-web.sh deploy
+
+# 完整发布流程
+./scripts/dev-web.sh full
+
+# 查看帮助
+./scripts/dev-web.sh help
+```
+
+### 手动命令
 
 ```bash
 # 首次启动（构建所有服务）
