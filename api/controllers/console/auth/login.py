@@ -84,9 +84,7 @@ class LoginApi(Resource):
     @setup_required
     @email_password_login_enabled
     @console_ns.expect(console_ns.models[LoginPayload.__name__])
-    # NOTE: @decrypt_password_field removed for compatibility with dify-web:1.11.1
-    # The 1.11.1 web image doesn't have password encryption (added in PR #29659 after 1.11.1)
-    # Re-enable this when upgrading to a newer web image that includes encryption
+    @decrypt_password_field  # Re-enabled for dify-web:1.11.2+ (includes PR #29659)
     def post(self):
         """Authenticate user and login."""
         args = LoginPayload.model_validate(console_ns.payload)
