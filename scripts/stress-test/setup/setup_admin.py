@@ -3,10 +3,19 @@
 import sys
 from pathlib import Path
 
+# Add stress-test directory to path for common module
 sys.path.append(str(Path(__file__).parent.parent))
+
+# Add scripts directory to path for init_admin module (Single Source of Truth)
+scripts_dir = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(scripts_dir))
 
 import httpx
 from common import Logger, config_helper
+
+# Import admin credentials from init_admin.py (Single Source of Truth)
+# This ensures stress-test uses the same credentials as the main init script
+from init_admin import ADMIN_EMAIL, ADMIN_NAME, ADMIN_PASSWORD
 
 
 def setup_admin_account() -> None:
@@ -15,11 +24,11 @@ def setup_admin_account() -> None:
     log = Logger("SetupAdmin")
     log.header("Setting up Admin Account")
 
-    # Admin account credentials
+    # Admin account credentials - imported from scripts/init_admin.py
     admin_config = {
-        "email": "test@dify.ai",
-        "username": "dify",
-        "password": "password123",
+        "email": ADMIN_EMAIL,
+        "username": ADMIN_NAME,
+        "password": ADMIN_PASSWORD,
     }
 
     # Save credentials to config file

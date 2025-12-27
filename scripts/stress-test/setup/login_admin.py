@@ -1,14 +1,34 @@
 #!/usr/bin/env python3
 
+import base64
+import json
 import sys
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).parent.parent))
 
-import json
-
 import httpx
 from common import Logger, config_helper
+
+
+def encrypt_password(password: str) -> str:
+    """
+    Encrypt password using Base64 encoding (same as frontend).
+    
+    This mimics the frontend's encryptPassword function in web/utils/encryption.ts:
+    - Encodes password to UTF-8 bytes
+    - Base64 encodes the bytes
+    
+    Args:
+        password: Plain text password
+        
+    Returns:
+        Base64 encoded password string
+    """
+    # Encode password to UTF-8 bytes, then Base64 encode
+    utf8_bytes = password.encode("utf-8")
+    base64_encoded = base64.b64encode(utf8_bytes).decode("utf-8")
+    return base64_encoded
 
 
 def login_admin() -> None:
@@ -32,9 +52,11 @@ def login_admin() -> None:
     login_endpoint = f"{base_url}/console/api/login"
 
     # Prepare login payload
+    # Encrypt password using Base64 (same as frontend)
+    encrypted_password = encrypt_password(admin_config["password"])
     login_payload = {
         "email": admin_config["email"],
-        "password": admin_config["password"],
+        "password": encrypted_password,
         "remember_me": True,
     }
 
@@ -58,21 +80,35 @@ def login_admin() -> None:
                     log.error(f"Login failed: {response_data}")
                     return
 
-                # Extract tokens from data field
-                token_data = response_data.get("data", {})
-                access_token = token_data.get("access_token", "")
-                refresh_token = token_data.get("refresh_token", "")
+                # Tokens are stored in cookies, not in response body
+                # Check all available cookies (may have __Host- prefix)
+                all_cookies = dict(response.cookies)
+                log.debug(f"All cookies from login: {list(all_cookies.keys())}")
+                
+                # Try different possible cookie names
+                access_token = (
+                    all_cookies.get("access_token") or
+                    all_cookies.get("__Host-access_token") or
+                    ""
+                )
+                refresh_token = (
+                    all_cookies.get("refresh_token") or
+                    all_cookies.get("__Host-refresh_token") or
+                    ""
+                )
 
                 if not access_token:
-                    log.error("No access token found in response")
-                    log.debug(f"Full response: {json.dumps(response_data, indent=2)}")
+                    log.error("No access token found in cookies")
+                    log.debug(f"Response body: {json.dumps(response_data, indent=2)}")
+                    log.debug(f"Available cookies: {list(all_cookies.keys())}")
                     return
-
-                # Save token to config file
+                
+                # Save all cookies for reuse in subsequent requests
                 token_config = {
                     "email": admin_config["email"],
                     "access_token": access_token,
                     "refresh_token": refresh_token,
+                    "all_cookies": all_cookies,  # Save all cookies for reuse
                 }
 
                 # Save token config

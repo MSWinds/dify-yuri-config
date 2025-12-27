@@ -742,6 +742,9 @@ services:
       # Protect the container's virtual environment from being overwritten by the bind mount
       - /app/api/.venv
       - ../scripts:/app/scripts
+    ports:
+      # Expose API port for local development and stress testing
+      - "${EXPOSE_API_PORT:-5001}:${DIFY_PORT:-5001}"
     networks:
       - ssrf_proxy_network
       - default

@@ -5,7 +5,7 @@ import sys
 API_URL = "http://localhost:5001/console/api/setup"
 ADMIN_EMAIL = "kaijie.yu@cgu.edu"  # Default to teacher
 ADMIN_NAME = "Yuri"
-ADMIN_PASSWORD = "password123"
+ADMIN_PASSWORD = "CGUgenaiclassTA2026"
 
 def init_admin():
     print(f"Attempting to initialize admin account: {ADMIN_EMAIL}")

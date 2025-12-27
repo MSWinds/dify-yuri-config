@@ -235,6 +235,41 @@ class ConfigHelper:
             return api_key.get("token")
         return None
 
+    def get_all_cookies(self) -> dict[str, str]:
+        """Get all cookies from auth section for reuse in subsequent requests.
+
+        Returns:
+            Dictionary of cookie name-value pairs, or empty dict if not found
+        """
+        auth = self.get_state_section("auth")
+        if auth and "all_cookies" in auth:
+            return auth.get("all_cookies", {})
+        # Fallback: construct cookies from access_token if all_cookies not available
+        if auth and "access_token" in auth:
+            cookies = {}
+            if "access_token" in auth:
+                cookies["access_token"] = auth["access_token"]
+            if "refresh_token" in auth:
+                cookies["refresh_token"] = auth["refresh_token"]
+            return cookies
+        return {}
+
+    def get_csrf_token(self) -> str | None:
+        """Get the CSRF token from auth section.
+
+        Returns:
+            CSRF token string or None if not found
+        """
+        auth = self.get_state_section("auth")
+        if auth:
+            # Try to get from all_cookies first
+            if "all_cookies" in auth and "csrf_token" in auth.get("all_cookies", {}):
+                return auth["all_cookies"]["csrf_token"]
+            # Fallback: try direct access
+            if "csrf_token" in auth:
+                return auth["csrf_token"]
+        return None
+
 
 # Create a default instance for convenience
 config_helper = ConfigHelper()
