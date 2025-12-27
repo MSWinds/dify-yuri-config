@@ -53,10 +53,10 @@ Medium - `RegisterService.register` may change upstream. Check this method on ea
 
 ---
 
-## 3. Auto-Add Teachers to Student Workspaces
+## 3. Auto-Add Teachers to Student Workspaces (Bidirectional Sync)
 
 ### Why
-Teachers need admin access to all student workspaces to grade assignments.
+Teachers need admin access to all student workspaces to grade assignments, regardless of registration order.
 
 ### What
 - **File**: `api/events/event_handlers/classroom_init.py` (NEW FILE)
@@ -64,10 +64,43 @@ Teachers need admin access to all student workspaces to grade assignments.
 - **Listens to**: `tenant_was_created` event
 
 ### How
-When a new workspace is created:
-1. Read `CLASSROOM_TEACHERS` config
-2. Find teacher accounts
-3. Add each teacher as admin to the new workspace
+When a new workspace is created, there are two scenarios:
+
+**Scenario 1: Student creates workspace**
+1. Check if owner is NOT in `CLASSROOM_TEACHERS` (i.e., is a student)
+2. Find all teacher accounts that already exist
+3. Add each teacher as admin to the student's workspace
+
+**Scenario 2: Teacher creates workspace**
+1. Check if owner IS in `CLASSROOM_TEACHERS` (i.e., is a teacher)
+2. Find all student accounts from `CLASSROOM_STUDENT_WHITELIST`
+3. For each student, find their owned workspaces
+4. Add the new teacher to all those student workspaces as admin
+
+This ensures:
+- ✅ Students' workspaces have all teachers as admins
+- ✅ Teachers' workspaces remain private (no auto-add of other teachers)
+- ✅ Works regardless of registration order
+
+### Example Flow
+```
+# Case 1: Teachers register first
+Teacher A registers → Creates Workspace A (private)
+Teacher B registers → Creates Workspace B (private)
+Student registers → Creates Workspace S → A, B both added to Workspace S
+
+# Case 2: Student registers first
+Student registers → Creates Workspace S (no teachers yet, none exist)
+Teacher A registers → Creates Workspace A → A added to Workspace S
+Teacher B registers → Creates Workspace B → B added to Workspace S
+Final result: Workspace S has [Student (owner), Teacher A (admin), Teacher B (admin)]
+
+# Case 3: Mixed order
+Teacher A registers → Creates Workspace A
+Student registers → Creates Workspace S → A added to Workspace S
+Teacher B registers → Creates Workspace B → B added to Workspace S
+Final result: Workspace S has [Student (owner), Teacher A (admin), Teacher B (admin)]
+```
 
 ### Risks
 Medium - event system changes could break this. Verify `tenant_was_created` event still exists.
