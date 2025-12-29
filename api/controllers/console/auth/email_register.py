@@ -8,26 +8,28 @@ from configs import dify_config
 from constants.languages import languages
 from controllers.console import console_ns
 from controllers.console.auth.error import (
+    AccountNotWhitelistError,
     EmailAlreadyInUseError,
     EmailCodeError,
     EmailRegisterLimitError,
     InvalidEmailError,
     InvalidTokenError,
     PasswordMismatchError,
-    AccountNotWhitelistError,
 )
 from extensions.ext_database import db
 from libs.helper import EmailStr, extract_remote_ip
 from libs.password import valid_password
 from models import Account
 from services.account_service import AccountService
-from services.feature_service import FeatureService
 from services.billing_service import BillingService
 from services.errors.account import (
     AccountNotFoundError,
     AccountRegisterError,
+)
+from services.errors.account import (
     AccountNotWhitelistError as AccountNotWhitelistServiceError,
 )
+from services.feature_service import FeatureService
 
 from ..error import AccountInFreezeError, EmailSendIpLimitError
 from ..wraps import email_password_login_enabled, email_register_enabled, setup_required
