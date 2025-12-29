@@ -14,14 +14,20 @@ from controllers.console.auth.error import (
     InvalidEmailError,
     InvalidTokenError,
     PasswordMismatchError,
+    AccountNotWhitelistError,
 )
 from extensions.ext_database import db
 from libs.helper import EmailStr, extract_remote_ip
 from libs.password import valid_password
 from models import Account
 from services.account_service import AccountService
+from services.feature_service import FeatureService
 from services.billing_service import BillingService
-from services.errors.account import AccountNotFoundError, AccountRegisterError
+from services.errors.account import (
+    AccountNotFoundError,
+    AccountRegisterError,
+    AccountNotWhitelistError as AccountNotWhitelistServiceError,
+)
 
 from ..error import AccountInFreezeError, EmailSendIpLimitError
 from ..wraps import email_password_login_enabled, email_register_enabled, setup_required
@@ -72,6 +78,19 @@ class EmailRegisterSendEmailApi(Resource):
 
         if dify_config.BILLING_ENABLED and BillingService.is_email_in_freeze(args.email):
             raise AccountInFreezeError()
+
+        # [Classroom Mode] Whitelist Check
+        system_features = FeatureService.get_system_features()
+        if system_features.classroom_mode:
+            allowed_list = []
+            if system_features.classroom_teachers:
+                allowed_list.extend([e.strip() for e in system_features.classroom_teachers.split(',')])
+            if system_features.classroom_student_whitelist:
+                allowed_list.extend([e.strip() for e in system_features.classroom_student_whitelist.split(',')])
+            
+            # Case-insensitive check
+            if args.email.lower() not in [e.lower() for e in allowed_list]:
+                raise AccountNotWhitelistError()
 
         with Session(db.engine) as session:
             account = session.execute(select(Account).filter_by(email=args.email)).scalar_one_or_none()
@@ -168,5 +187,7 @@ class EmailRegisterResetApi(Resource):
             )
         except AccountRegisterError:
             raise AccountInFreezeError()
+        except AccountNotWhitelistServiceError:
+            raise AccountNotWhitelistError()
 
         return account

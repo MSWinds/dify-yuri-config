@@ -159,7 +159,7 @@ def reset_encrypt_key_pair(only_missing: bool = False):
             for tenant in tenants:
                 click.echo(click.style(f"  - {tenant.name} (ID: {tenant.id})", fg="white"))
                 tenant.encrypt_public_key = generate_key_pair(tenant.id)
-                click.echo(click.style(f"    ✓ Successfully generated encrypt_public_key", fg="green"))
+                click.echo(click.style("    ✓ Successfully generated encrypt_public_key", fg="green"))
             
             click.echo(click.style(f"\nSuccessfully fixed {len(tenants)} workspace(s).", fg="green"))
         else:
@@ -171,7 +171,9 @@ def reset_encrypt_key_pair(only_missing: bool = False):
 
                 tenant.encrypt_public_key = generate_key_pair(tenant.id)
 
-                session.query(Provider).where(Provider.provider_type == "custom", Provider.tenant_id == tenant.id).delete()
+                session.query(Provider).where(
+                    Provider.provider_type == "custom", Provider.tenant_id == tenant.id
+                ).delete()
                 session.query(ProviderModel).where(ProviderModel.tenant_id == tenant.id).delete()
 
                 click.echo(
@@ -211,7 +213,7 @@ def fix_missing_encrypt_keys():
             try:
                 tenant.encrypt_public_key = generate_key_pair(tenant.id)
                 fixed_count += 1
-                click.echo(click.style(f"    ✓ Successfully generated encrypt_public_key", fg="green"))
+                click.echo(click.style("    ✓ Successfully generated encrypt_public_key", fg="green"))
             except Exception as e:
                 click.echo(click.style(f"    ✗ Error: {e}", fg="red"))
                 raise

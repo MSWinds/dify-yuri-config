@@ -155,3 +155,10 @@ class MemberNotInTenantError(BaseHTTPException):
     error_code = "member_not_in_tenant"
     description = "The member is not in the workspace."
     code = 400
+
+
+# New error response for whitelist
+class AccountNotWhitelistError(BaseHTTPException):
+    error_code = "account_not_in_whitelist"
+    description = "Your email is not in the class whitelist."
+    code = 403

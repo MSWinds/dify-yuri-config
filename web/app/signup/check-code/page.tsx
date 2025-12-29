@@ -91,7 +91,11 @@ export default function CheckCode() {
         </p>
       </div>
 
-      <form action="">
+      <form onSubmit={(e) => {
+        e.preventDefault()
+        verify()
+      }}
+      >
         <label htmlFor="code" className="system-md-semibold mb-1 text-text-secondary">{t('login.checkCode.verificationCode')}</label>
         <Input value={code} onChange={e => setVerifyCode(e.target.value)} maxLength={6} className="mt-1" placeholder={t('login.checkCode.verificationCodePlaceholder') as string} />
         <Button loading={loading} disabled={loading} className="my-3 w-full" variant="primary" onClick={verify}>{t('login.checkCode.verify')}</Button>

@@ -39,6 +39,7 @@ from services.errors.account import (
     AccountAlreadyInTenantError,
     AccountLoginError,
     AccountNotLinkTenantError,
+    AccountNotWhitelistError,
     AccountPasswordError,
     AccountRegisterError,
     CannotOperateSelfError,
@@ -239,6 +240,21 @@ class AccountService:
             from controllers.console.error import AccountNotFound
 
             raise AccountNotFound()
+
+        # [Classroom Mode] Whitelist Check global enforcement
+        system_features = FeatureService.get_system_features()
+        if system_features.classroom_mode:
+            allowed_list = []
+            if system_features.classroom_teachers:
+                allowed_list.extend([e.strip() for e in system_features.classroom_teachers.split(',')])
+            if system_features.classroom_student_whitelist:
+                allowed_list.extend([e.strip() for e in system_features.classroom_student_whitelist.split(',')])
+            
+            # Case-insensitive check
+            if email.lower() not in [e.lower() for e in allowed_list]:
+                raise AccountNotWhitelistError(
+                    "Classroom Mode: Registration is restricted to enrolled students and teachers."
+                )
 
         if dify_config.BILLING_ENABLED and BillingService.is_email_in_freeze(email):
             raise AccountRegisterError(
@@ -1320,7 +1336,9 @@ class RegisterService:
                 allowed_list.extend([e.strip() for e in system_features.classroom_student_whitelist.split(',')])
             
             if email not in allowed_list:
-                raise AccountRegisterError("Classroom Mode: Registration is restricted to enrolled students and teachers.")
+                raise AccountNotWhitelistError(
+                    "Classroom Mode: Registration is restricted to enrolled students and teachers."
+                )
 
         db.session.begin_nested()
         try:
@@ -1374,7 +1392,11 @@ class RegisterService:
         # [Classroom Mode] Block Invitations
         system_features = FeatureService.get_system_features()
         if system_features.classroom_mode:
-            teachers = [e.strip() for e in system_features.classroom_teachers.split(',')] if system_features.classroom_teachers else []
+            teachers = (
+                [e.strip() for e in system_features.classroom_teachers.split(',')]
+                if system_features.classroom_teachers
+                else []
+            )
             if inviter.email not in teachers:
                 # We raise a ValueError or appropriate exception that the frontend will show
                 # Using ValueError is safe as it propagates to API error handler
