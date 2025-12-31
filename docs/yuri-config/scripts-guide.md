@@ -27,6 +27,8 @@ Directly invokes the backend `AccountService` to verify if a user can authentica
 
 **Usage:**
 ```bash
+docker exec docker-api-1 python /app/scripts/init_admin.py
+
 uv run --project api python scripts/verify_auth.py
 ```
 
