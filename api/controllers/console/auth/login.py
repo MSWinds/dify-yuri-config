@@ -86,7 +86,7 @@ class LoginApi(Resource):
     @setup_required
     @email_password_login_enabled
     @console_ns.expect(console_ns.models[LoginPayload.__name__])
-    @decrypt_password_field
+    @decrypt_password_field  # Re-enabled for dify-web:1.11.2+ (includes PR #29659)
     def post(self):
         """Authenticate user and login."""
         args = LoginPayload.model_validate(console_ns.payload)

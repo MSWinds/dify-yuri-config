@@ -17,12 +17,15 @@ def import_workflow_app() -> None:
     log = Logger("ImportApp")
     log.header("Importing Workflow Application")
 
-    # Read token from config
+    # Read token and CSRF token from config
     access_token = config_helper.get_token()
+    csrf_token = config_helper.get_csrf_token()
     if not access_token:
         log.error("No access token found in config")
         log.info("Please run login_admin.py first to get access token")
         return
+    if not csrf_token:
+        log.warning("No CSRF token found in config - requests may fail")
 
     # Read workflow DSL file
     dsl_path = Path(__file__).parent / "dsl" / "workflow_llm.yml"
@@ -57,30 +60,35 @@ def import_workflow_app() -> None:
         "Sec-Fetch-Mode": "cors",
         "Sec-Fetch-Site": "same-site",
         "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
-        "authorization": f"Bearer {access_token}",
-        "content-type": "application/json",
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json",
+        "X-CSRF-Token": csrf_token if csrf_token else "",  # CSRF token required for console API
         "sec-ch-ua": '"Not;A=Brand";v="99", "Google Chrome";v="139", "Chromium";v="139"',
         "sec-ch-ua-mobile": "?0",
         "sec-ch-ua-platform": '"macOS"',
     }
 
-    cookies = {"locale": "en-US"}
+    # Get all cookies from login (includes access_token with correct name, possibly __Host- prefix)
+    all_cookies = config_helper.get_all_cookies()
+    all_cookies["locale"] = "en-US"
 
     try:
         # Make the import request
+        # Use cookies parameter directly - httpx will handle cookie formatting
         with httpx.Client() as client:
             response = client.post(
                 import_endpoint,
                 json=import_payload,
                 headers=headers,
-                cookies=cookies,
+                cookies=all_cookies,  # Use cookies parameter directly
             )
 
             if response.status_code == 200:
                 response_data = response.json()
 
-                # Check import status
-                if response_data.get("status") == "completed":
+                # Check import status - accept both "completed" and "completed-with-warnings"
+                status = response_data.get("status")
+                if status in ["completed", "completed-with-warnings"]:
                     app_id = response_data.get("app_id")
 
                     if app_id:
@@ -88,6 +96,8 @@ def import_workflow_app() -> None:
                         log.key_value("App ID", app_id)
                         log.key_value("App Mode", response_data.get("app_mode"))
                         log.key_value("DSL Version", response_data.get("imported_dsl_version"))
+                        if status == "completed-with-warnings":
+                            log.warning("Import completed with warnings (this is usually OK)")
 
                         # Save app_id to config
                         app_config = {
@@ -103,11 +113,11 @@ def import_workflow_app() -> None:
                         log.error("Import completed but no app_id received")
                         log.debug(f"Response: {json.dumps(response_data, indent=2)}")
 
-                elif response_data.get("status") == "failed":
+                elif status == "failed":
                     log.error("Import failed")
                     log.error(f"Error: {response_data.get('error')}")
                 else:
-                    log.warning(f"Import status: {response_data.get('status')}")
+                    log.warning(f"Import status: {status}")
                     log.debug(f"Response: {json.dumps(response_data, indent=2)}")
 
             elif response.status_code == 401:

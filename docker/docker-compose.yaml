@@ -56,6 +56,9 @@ x-shared-env: &shared-api-worker-env
   ENABLE_WEBSITE_FIRECRAWL: ${ENABLE_WEBSITE_FIRECRAWL:-true}
   ENABLE_WEBSITE_WATERCRAWL: ${ENABLE_WEBSITE_WATERCRAWL:-true}
   NEXT_PUBLIC_ENABLE_SINGLE_DOLLAR_LATEX: ${NEXT_PUBLIC_ENABLE_SINGLE_DOLLAR_LATEX:-false}
+  CLASSROOM_MODE: ${CLASSROOM_MODE:-false}
+  CLASSROOM_TEACHERS: ${CLASSROOM_TEACHERS:-}
+  CLASSROOM_STUDENT_WHITELIST: ${CLASSROOM_STUDENT_WHITELIST:-}
   DB_TYPE: ${DB_TYPE:-postgresql}
   DB_USERNAME: ${DB_USERNAME:-postgres}
   DB_PASSWORD: ${DB_PASSWORD:-difyai123456}
@@ -435,6 +438,8 @@ x-shared-env: &shared-api-worker-env
   EMAIL_REGISTER_TOKEN_EXPIRY_MINUTES: ${EMAIL_REGISTER_TOKEN_EXPIRY_MINUTES:-5}
   CHANGE_EMAIL_TOKEN_EXPIRY_MINUTES: ${CHANGE_EMAIL_TOKEN_EXPIRY_MINUTES:-5}
   OWNER_TRANSFER_TOKEN_EXPIRY_MINUTES: ${OWNER_TRANSFER_TOKEN_EXPIRY_MINUTES:-5}
+  ALLOW_REGISTER: ${ALLOW_REGISTER:-true}
+  ALLOW_CREATE_WORKSPACE: ${ALLOW_CREATE_WORKSPACE:-true}
   CODE_EXECUTION_ENDPOINT: ${CODE_EXECUTION_ENDPOINT:-http://sandbox:8194}
   CODE_EXECUTION_API_KEY: ${CODE_EXECUTION_API_KEY:-dify-sandbox}
   CODE_EXECUTION_SSL_VERIFY: ${CODE_EXECUTION_SSL_VERIFY:-True}
@@ -730,6 +735,10 @@ services:
       PLUGIN_MAX_PACKAGE_SIZE: ${PLUGIN_MAX_PACKAGE_SIZE:-52428800}
       PLUGIN_DAEMON_TIMEOUT: ${PLUGIN_DAEMON_TIMEOUT:-600.0}
       INNER_API_KEY_FOR_PLUGIN: ${PLUGIN_DIFY_INNER_API_KEY:-QaHbTe77CtuXmsfyhR7+vRjI/+XbV1AaFy691iy+kGDv2Jvy0/eAh8Y1}
+      PYTHONUNBUFFERED: '1'
+      EXPOSE_IMGS_URL: ${EXPOSE_IMGS_URL:-}
+      MAIL_TYPE: ${MAIL_TYPE:-}
+      MAIL_DEFAULT_SEND_FROM: ${MAIL_DEFAULT_SEND_FROM:-}
     depends_on:
       init_permissions:
         condition: service_completed_successfully
@@ -750,6 +759,14 @@ services:
     volumes:
       # Mount the storage directory to the container, for storing user files.
       - ./volumes/app/storage:/app/api/storage
+      # Mount local source code for Classroom Mode patches
+      - ../api:/app/api
+      # Protect the container's virtual environment from being overwritten by the bind mount
+      - /app/api/.venv
+      - ../scripts:/app/scripts
+    ports:
+      # Expose API port for local development and stress testing
+      - "${EXPOSE_API_PORT:-5001}:${DIFY_PORT:-5001}"
     networks:
       - ssrf_proxy_network
       - default
@@ -789,6 +806,11 @@ services:
     volumes:
       # Mount the storage directory to the container, for storing user files.
       - ./volumes/app/storage:/app/api/storage
+      # Mount local source code for Classroom Mode patches
+      - ../api:/app/api
+      # Protect the container's virtual environment from being overwritten by the bind mount
+      - /app/api/.venv
+      - ../scripts:/app/scripts
     networks:
       - ssrf_proxy_network
       - default
@@ -820,13 +842,29 @@ services:
         required: false
       redis:
         condition: service_started
+    volumes:
+      # Mount local source code for Classroom Mode patches
+      - ../api:/app/api
+      # Protect the container's virtual environment from being overwritten by the bind mount
+      - /app/api/.venv
     networks:
       - ssrf_proxy_network
       - default
 
   # Frontend web application.
   web:
-    image: langgenius/dify-web:1.12.1
+    # Use local build instead of official image to enable UI customization
+    build:
+      context: ../web
+      dockerfile: Dockerfile
+      # Use BuildKit for faster builds and better caching
+      cache_from:
+        - type=local,src=/tmp/.buildx-cache
+      # Build args for optimization
+      args:
+        - NODE_OPTIONS=--max-old-space-size=4096
+    # Fallback to official image if build fails (uncomment to use official image)
+    # image: langgenius/dify-web:1.12.1
     restart: always
     environment:
       CONSOLE_API_URL: ${CONSOLE_API_URL:-}
@@ -852,6 +890,10 @@ services:
       ENABLE_WEBSITE_JINAREADER: ${ENABLE_WEBSITE_JINAREADER:-true}
       ENABLE_WEBSITE_FIRECRAWL: ${ENABLE_WEBSITE_FIRECRAWL:-true}
       ENABLE_WEBSITE_WATERCRAWL: ${ENABLE_WEBSITE_WATERCRAWL:-true}
+    volumes:
+      # Mount local web public directory for static assets (images, etc.)
+      # Note: For code changes, you still need to rebuild: docker-compose build web
+      - ../web/public:/app/web/public
 
   # The PostgreSQL database.
   db_postgres:
@@ -859,6 +901,8 @@ services:
     profiles:
       - postgresql
     restart: always
+    ports:
+      - "${EXPOSE_DB_PORT:-5432}:5432"
     environment:
       POSTGRES_USER: ${DB_USERNAME:-postgres}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-difyai123456}
@@ -1088,6 +1132,7 @@ services:
       - ./nginx/nginx.conf.template:/etc/nginx/nginx.conf.template
       - ./nginx/proxy.conf.template:/etc/nginx/proxy.conf.template
       - ./nginx/https.conf.template:/etc/nginx/https.conf.template
+      - ./nginx/redirect.conf.template:/etc/nginx/redirect.conf.template
       - ./nginx/conf.d:/etc/nginx/conf.d
       - ./nginx/docker-entrypoint.sh:/docker-entrypoint-mount.sh
       - ./nginx/ssl:/etc/ssl # cert dir (legacy)

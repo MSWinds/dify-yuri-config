@@ -103,10 +103,13 @@ echo
 
 # Ask user for run mode
 echo -e "${YELLOW}Select run mode:${NC}"
-echo "  1) Headless (CLI only) - Default"
-echo "  2) Web UI (http://localhost:8089)"
-echo -n "Choice [1]: "
-read -t 10 choice || choice="1"
+echo "  1) Headless (CLI only)"
+echo "  2) Web UI (http://localhost:8089) - Default"
+echo -n "Choice [2]: "
+read choice
+if [ -z "$choice" ]; then
+    choice="2"
+fi
 echo
 
 # Use SSE stress test script

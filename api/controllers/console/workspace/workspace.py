@@ -283,6 +283,11 @@ class WorkspaceInfoApi(Resource):
         payload = console_ns.payload or {}
         args = WorkspaceInfoPayload.model_validate(payload)
 
+        # [Classroom Mode] Block Workspace Renaming
+        if FeatureService.get_system_features().classroom_mode:
+            from werkzeug.exceptions import Forbidden
+            raise Forbidden("Classroom Mode: Workspace renaming is disabled.")
+
         if not current_tenant_id:
             raise ValueError("No current tenant")
         tenant = db.get_or_404(Tenant, current_tenant_id)

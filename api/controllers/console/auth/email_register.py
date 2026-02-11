@@ -7,6 +7,7 @@ from configs import dify_config
 from constants.languages import languages
 from controllers.console import console_ns
 from controllers.console.auth.error import (
+    AccountNotWhitelistError,
     EmailAlreadyInUseError,
     EmailCodeError,
     EmailRegisterLimitError,
@@ -20,7 +21,14 @@ from libs.password import valid_password
 from models import Account
 from services.account_service import AccountService
 from services.billing_service import BillingService
-from services.errors.account import AccountNotFoundError, AccountRegisterError
+from services.errors.account import (
+    AccountNotFoundError,
+    AccountRegisterError,
+)
+from services.errors.account import (
+    AccountNotWhitelistError as AccountNotWhitelistServiceError,
+)
+from services.feature_service import FeatureService
 
 from ..error import AccountInFreezeError, EmailSendIpLimitError
 from ..wraps import email_password_login_enabled, email_register_enabled, setup_required
@@ -72,6 +80,19 @@ class EmailRegisterSendEmailApi(Resource):
 
         if dify_config.BILLING_ENABLED and BillingService.is_email_in_freeze(normalized_email):
             raise AccountInFreezeError()
+
+        # [Classroom Mode] Whitelist Check
+        system_features = FeatureService.get_system_features()
+        if system_features.classroom_mode:
+            allowed_list = []
+            if system_features.classroom_teachers:
+                allowed_list.extend([e.strip() for e in system_features.classroom_teachers.split(',')])
+            if system_features.classroom_student_whitelist:
+                allowed_list.extend([e.strip() for e in system_features.classroom_student_whitelist.split(',')])
+            
+            # Case-insensitive check
+            if args.email.lower() not in [e.lower() for e in allowed_list]:
+                raise AccountNotWhitelistError()
 
         with Session(db.engine) as session:
             account = AccountService.get_account_by_email_with_case_fallback(args.email, session=session)
@@ -171,5 +192,7 @@ class EmailRegisterResetApi(Resource):
             )
         except AccountRegisterError:
             raise AccountInFreezeError()
+        except AccountNotWhitelistServiceError:
+            raise AccountNotWhitelistError()
 
         return account

@@ -56,6 +56,7 @@ services:
     volumes:
       # Mount the storage directory to the container, for storing user files.
       - ./volumes/app/storage:/app/api/storage
+      - ../scripts:/app/scripts
     networks:
       - ssrf_proxy_network
       - default
@@ -95,6 +96,7 @@ services:
     volumes:
       # Mount the storage directory to the container, for storing user files.
       - ./volumes/app/storage:/app/api/storage
+      - ../scripts:/app/scripts
     networks:
       - ssrf_proxy_network
       - default
@@ -165,6 +167,8 @@ services:
     profiles:
       - postgresql
     restart: always
+    ports:
+      - "${EXPOSE_DB_PORT:-5432}:5432"
     environment:
       POSTGRES_USER: ${DB_USERNAME:-postgres}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-difyai123456}
@@ -394,6 +398,7 @@ services:
       - ./nginx/nginx.conf.template:/etc/nginx/nginx.conf.template
       - ./nginx/proxy.conf.template:/etc/nginx/proxy.conf.template
       - ./nginx/https.conf.template:/etc/nginx/https.conf.template
+      - ./nginx/redirect.conf.template:/etc/nginx/redirect.conf.template
       - ./nginx/conf.d:/etc/nginx/conf.d
       - ./nginx/docker-entrypoint.sh:/docker-entrypoint-mount.sh
       - ./nginx/ssl:/etc/ssl # cert dir (legacy)

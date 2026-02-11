@@ -17,11 +17,14 @@ def create_api_key() -> None:
     log = Logger("CreateAPIKey")
     log.header("Creating API Key")
 
-    # Read token from config
+    # Read token and CSRF token from config
     access_token = config_helper.get_token()
+    csrf_token = config_helper.get_csrf_token()
     if not access_token:
         log.error("No access token found in config")
         return
+    if not csrf_token:
+        log.warning("No CSRF token found in config - requests may fail")
 
     # Read app_id from config
     app_id = config_helper.get_app_id()
@@ -50,22 +53,26 @@ def create_api_key() -> None:
         "Sec-Fetch-Mode": "cors",
         "Sec-Fetch-Site": "same-site",
         "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
-        "authorization": f"Bearer {access_token}",
-        "content-type": "application/json",
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json",
+        "X-CSRF-Token": csrf_token if csrf_token else "",  # CSRF token required for console API
         "sec-ch-ua": '"Not;A=Brand";v="99", "Google Chrome";v="139", "Chromium";v="139"',
         "sec-ch-ua-mobile": "?0",
         "sec-ch-ua-platform": '"macOS"',
     }
 
-    cookies = {"locale": "en-US"}
+    # Get all cookies from login (includes access_token with correct name, possibly __Host- prefix)
+    all_cookies = config_helper.get_all_cookies()
+    all_cookies["locale"] = "en-US"
 
     try:
         # Make the API key creation request
+        # Use cookies parameter directly - httpx will handle cookie formatting
         with httpx.Client() as client:
             response = client.post(
                 api_key_endpoint,
                 headers=headers,
-                cookies=cookies,
+                cookies=all_cookies,  # Use cookies parameter directly
             )
 
             if response.status_code == 200 or response.status_code == 201:

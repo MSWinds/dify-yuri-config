@@ -39,6 +39,7 @@ from services.errors.account import (
     AccountAlreadyInTenantError,
     AccountLoginError,
     AccountNotLinkTenantError,
+    AccountNotWhitelistError,
     AccountPasswordError,
     AccountRegisterError,
     CannotOperateSelfError,
@@ -239,6 +240,21 @@ class AccountService:
             from controllers.console.error import AccountNotFound
 
             raise AccountNotFound()
+
+        # [Classroom Mode] Whitelist Check global enforcement
+        system_features = FeatureService.get_system_features()
+        if system_features.classroom_mode:
+            allowed_list = []
+            if system_features.classroom_teachers:
+                allowed_list.extend([e.strip() for e in system_features.classroom_teachers.split(',')])
+            if system_features.classroom_student_whitelist:
+                allowed_list.extend([e.strip() for e in system_features.classroom_student_whitelist.split(',')])
+
+            # Case-insensitive check
+            if email.lower() not in [e.lower() for e in allowed_list]:
+                raise AccountNotWhitelistError(
+                    "Classroom Mode: Registration is restricted to enrolled students and teachers."
+                )
 
         if dify_config.BILLING_ENABLED and BillingService.is_email_in_freeze(email):
             raise AccountRegisterError(
@@ -1380,8 +1396,22 @@ class RegisterService:
         is_setup: bool | None = False,
         create_workspace_required: bool | None = True,
     ) -> Account:
-        db.session.begin_nested()
         """Register account"""
+        # [Classroom Mode] Whitelist Check - MUST be before create_account() to prevent unauthorized registration
+        system_features = FeatureService.get_system_features()
+        if system_features.classroom_mode:
+            allowed_list = []
+            if system_features.classroom_teachers:
+                allowed_list.extend([e.strip() for e in system_features.classroom_teachers.split(',')])
+            if system_features.classroom_student_whitelist:
+                allowed_list.extend([e.strip() for e in system_features.classroom_student_whitelist.split(',')])
+
+            if email not in allowed_list:
+                raise AccountNotWhitelistError(
+                    "Classroom Mode: Registration is restricted to enrolled students and teachers."
+                )
+
+        db.session.begin_nested()
         try:
             account = AccountService.create_account(
                 email=email,
@@ -1390,6 +1420,7 @@ class RegisterService:
                 password=password,
                 is_setup=is_setup,
             )
+
             account.status = status or AccountStatus.ACTIVE
             account.initialized_at = naive_utc_now()
 
@@ -1430,6 +1461,17 @@ class RegisterService:
             raise ValueError("Inviter is required")
 
         normalized_email = email.lower()
+
+        # [Classroom Mode] Block Invitations
+        system_features = FeatureService.get_system_features()
+        if system_features.classroom_mode:
+            teachers = (
+                [e.strip().lower() for e in system_features.classroom_teachers.split(',')]
+                if system_features.classroom_teachers
+                else []
+            )
+            if inviter.email.lower() not in teachers:
+                raise ValueError("Classroom Mode: Students cannot invite members. Please contact your instructor.")
 
         """Invite new member"""
         # Check workspace permission for member invitations

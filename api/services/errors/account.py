@@ -9,6 +9,11 @@ class AccountRegisterError(BaseServiceError):
     pass
 
 
+# New error for whitelist validation
+class AccountNotWhitelistError(BaseServiceError):
+    pass
+
+
 class AccountLoginError(BaseServiceError):
     pass
 

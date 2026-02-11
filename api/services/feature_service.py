@@ -164,8 +164,8 @@ class SystemFeatureModel(BaseModel):
     enable_email_code_login: bool = False
     enable_email_password_login: bool = True
     enable_social_oauth_login: bool = False
-    is_allow_register: bool = False
-    is_allow_create_workspace: bool = False
+    is_allow_register: bool = True
+    is_allow_create_workspace: bool = True
     is_email_setup: bool = False
     license: LicenseModel = LicenseModel()
     branding: BrandingModel = BrandingModel()
@@ -176,6 +176,11 @@ class SystemFeatureModel(BaseModel):
     trial_models: list[str] = []
     enable_trial_app: bool = False
     enable_explore_banner: bool = False
+
+    # Classroom Mode Configuration
+    classroom_mode: bool = False
+    classroom_teachers: str = ""
+    classroom_student_whitelist: str = ""
 
 
 class FeatureService:
@@ -250,6 +255,11 @@ class FeatureService:
         system_features.trial_models = cls._fulfill_trial_models_from_env()
         system_features.enable_trial_app = dify_config.ENABLE_TRIAL_APP
         system_features.enable_explore_banner = dify_config.ENABLE_EXPLORE_BANNER
+
+        # Classroom Mode
+        system_features.classroom_mode = dify_config.CLASSROOM_MODE
+        system_features.classroom_teachers = dify_config.CLASSROOM_TEACHERS
+        system_features.classroom_student_whitelist = dify_config.CLASSROOM_STUDENT_WHITELIST
 
     @classmethod
     def _fulfill_trial_models_from_env(cls) -> list[str]:

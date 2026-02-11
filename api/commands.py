@@ -133,38 +133,101 @@ def reset_email(email, new_email, email_confirm):
     "requiring re-entry."
     "Only support SELF_HOSTED mode.",
 )
+@click.option(
+    "--only-missing",
+    is_flag=True,
+    default=False,
+    help="Only generate keys for workspaces that don't have one (doesn't reset existing keys)",
+)
 @click.confirmation_option(
     prompt=click.style(
         "Are you sure you want to reset encrypt key pair? This operation cannot be rolled back!", fg="red"
     )
 )
-def reset_encrypt_key_pair():
+def reset_encrypt_key_pair(only_missing: bool = False):
     """
     Reset the encrypted key pair of workspace for encrypt LLM credentials.
     After the reset, all LLM credentials will become invalid, requiring re-entry.
     Only support SELF_HOSTED mode.
+    
+    If --only-missing is set, only generates keys for workspaces that don't have one,
+    without affecting existing keys or credentials.
     """
     if dify_config.EDITION != "SELF_HOSTED":
         click.echo(click.style("This command is only for SELF_HOSTED installations.", fg="red"))
         return
+    
     with sessionmaker(db.engine, expire_on_commit=False).begin() as session:
-        tenants = session.query(Tenant).all()
-        for tenant in tenants:
-            if not tenant:
-                click.echo(click.style("No workspaces found. Run /install first.", fg="red"))
+        if only_missing:
+            tenants = session.query(Tenant).filter(Tenant.encrypt_public_key.is_(None)).all()
+            if not tenants:
+                click.echo(click.style("No workspaces missing encrypt_public_key.", fg="green"))
                 return
+            
+            click.echo(click.style(f"Found {len(tenants)} workspace(s) missing encrypt_public_key:", fg="yellow"))
+            for tenant in tenants:
+                click.echo(click.style(f"  - {tenant.name} (ID: {tenant.id})", fg="white"))
+                tenant.encrypt_public_key = generate_key_pair(tenant.id)
+                click.echo(click.style("    ✓ Successfully generated encrypt_public_key", fg="green"))
+            
+            click.echo(click.style(f"\nSuccessfully fixed {len(tenants)} workspace(s).", fg="green"))
+        else:
+            tenants = session.query(Tenant).all()
+            for tenant in tenants:
+                if not tenant:
+                    click.echo(click.style("No workspaces found. Run /install first.", fg="red"))
+                    return
 
-            tenant.encrypt_public_key = generate_key_pair(tenant.id)
+                tenant.encrypt_public_key = generate_key_pair(tenant.id)
 
-            session.query(Provider).where(Provider.provider_type == "custom", Provider.tenant_id == tenant.id).delete()
-            session.query(ProviderModel).where(ProviderModel.tenant_id == tenant.id).delete()
+                session.query(Provider).where(
+                    Provider.provider_type == "custom", Provider.tenant_id == tenant.id
+                ).delete()
+                session.query(ProviderModel).where(ProviderModel.tenant_id == tenant.id).delete()
 
-            click.echo(
-                click.style(
-                    f"Congratulations! The asymmetric key pair of workspace {tenant.id} has been reset.",
-                    fg="green",
+                click.echo(
+                    click.style(
+                        f"Congratulations! The asymmetric key pair of workspace {tenant.id} has been reset.",
+                        fg="green",
+                    )
                 )
-            )
+
+
+@click.command(
+    "fix-missing-encrypt-keys",
+    help="Fix missing encrypt_public_key for workspaces that were created manually. "
+    "This only generates keys for workspaces that don't have one, without affecting existing keys.",
+)
+def fix_missing_encrypt_keys():
+    """
+    Fix missing encrypt_public_key for workspaces.
+    Only generates keys for workspaces that don't have one, without affecting existing keys.
+    """
+    if dify_config.EDITION != "SELF_HOSTED":
+        click.echo(click.style("This command is only for SELF_HOSTED installations.", fg="red"))
+        return
+    
+    with sessionmaker(db.engine, expire_on_commit=False).begin() as session:
+        tenants = session.query(Tenant).filter(Tenant.encrypt_public_key.is_(None)).all()
+        
+        if not tenants:
+            click.echo(click.style("No workspaces missing encrypt_public_key.", fg="green"))
+            return
+        
+        click.echo(click.style(f"Found {len(tenants)} workspace(s) missing encrypt_public_key:", fg="yellow"))
+        fixed_count = 0
+        
+        for tenant in tenants:
+            click.echo(click.style(f"  - {tenant.name} (ID: {tenant.id})", fg="white"))
+            try:
+                tenant.encrypt_public_key = generate_key_pair(tenant.id)
+                fixed_count += 1
+                click.echo(click.style("    ✓ Successfully generated encrypt_public_key", fg="green"))
+            except Exception as e:
+                click.echo(click.style(f"    ✗ Error: {e}", fg="red"))
+                raise
+        
+        click.echo(click.style(f"\nSuccessfully fixed {fixed_count} workspace(s).", fg="green"))
 
 
 @click.command("vdb-migrate", help="Migrate vector db.")

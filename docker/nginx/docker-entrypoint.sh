@@ -1,6 +1,8 @@
 #!/bin/bash
 
 HTTPS_CONFIG=''
+HTTP_TO_HTTPS_REDIRECT=''
+LISTEN_DIRECTIVE="listen ${NGINX_PORT};"
 
 if [ "${NGINX_HTTPS_ENABLED}" = "true" ]; then
     # Check if the certificate and key files for the specified domain exist
@@ -21,8 +23,16 @@ if [ "${NGINX_HTTPS_ENABLED}" = "true" ]; then
     export HTTPS_CONFIG
     # Substitute the HTTPS_CONFIG in the default.conf.template with content from https.conf.template
     envsubst '${HTTPS_CONFIG}' < /etc/nginx/conf.d/default.conf.template > /etc/nginx/conf.d/default.conf
+
+    # Build the HTTP -> HTTPS redirect server block from template
+    HTTP_TO_HTTPS_REDIRECT=$(envsubst '${NGINX_PORT} ${NGINX_SERVER_NAME}' < /etc/nginx/redirect.conf.template)
+
+    # Main server block only listens on HTTPS when redirect is enabled
+    LISTEN_DIRECTIVE="listen ${NGINX_SSL_PORT} ssl;"
 fi
 export HTTPS_CONFIG
+export HTTP_TO_HTTPS_REDIRECT
+export LISTEN_DIRECTIVE
 
 if [ "${NGINX_ENABLE_CERTBOT_CHALLENGE}" = "true" ]; then
     ACME_CHALLENGE_LOCATION='location /.well-known/acme-challenge/ { root /var/www/html; }'

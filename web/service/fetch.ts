@@ -68,8 +68,11 @@ const afterResponseErrorCode = (otherOptions: IOtherOptions): AfterResponseHook 
 
 const beforeErrorToast = (otherOptions: IOtherOptions): BeforeErrorHook => {
   return (error) => {
-    if (!otherOptions.silent)
+    if (!otherOptions.silent) {
+      if (error.response && error.response.status === 403)
+        return error
       Toast.notify({ type: 'error', message: error.message })
+    }
     return error
   }
 }
