@@ -868,7 +868,7 @@ class AuthConfig(BaseSettings):
 
     LOGIN_LOCKOUT_DURATION: PositiveInt = Field(
         description="Time (in seconds) a user must wait before retrying login after exceeding the rate limit.",
-        default=86400,
+        default=300,
     )
 
     FORGOT_PASSWORD_LOCKOUT_DURATION: PositiveInt = Field(

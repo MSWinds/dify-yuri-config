@@ -22,6 +22,7 @@ def app():
 @pytest.fixture(autouse=True)
 def _patch_wraps():
     wraps_features = SimpleNamespace(enable_email_password_login=True)
+    web_features = SimpleNamespace(classroom_mode=False, classroom_teachers="", classroom_student_whitelist="")
     console_dify = SimpleNamespace(ENTERPRISE_ENABLED=True, EDITION="CLOUD")
     web_dify = SimpleNamespace(ENTERPRISE_ENABLED=True)
     with (
@@ -29,6 +30,7 @@ def _patch_wraps():
         patch("controllers.console.wraps.dify_config", console_dify),
         patch("controllers.console.wraps.FeatureService.get_system_features", return_value=wraps_features),
         patch("controllers.web.login.dify_config", web_dify),
+        patch("controllers.web.login.FeatureService.get_system_features", return_value=web_features),
     ):
         mock_db.session.query.return_value.first.return_value = MagicMock()
         yield
@@ -57,6 +59,35 @@ class TestEmailCodeLoginSendEmailApi:
         assert response == {"result": "success", "data": "token-123"}
         mock_get_user.assert_called_once_with("User@Example.com")
         mock_send_email.assert_called_once_with(account=mock_account, language="en-US")
+
+    @patch("controllers.web.login.FeatureService.get_system_features")
+    @patch("controllers.web.login.WebAppAuthService.send_email_code_login_email")
+    @patch("controllers.web.login.WebAppAuthService.get_user_through_email")
+    def test_should_reject_non_whitelist_email_in_classroom_mode(
+        self,
+        mock_get_user,
+        mock_send_email,
+        mock_get_features,
+        app,
+    ):
+        from controllers.console.auth.error import AccountNotWhitelistError
+
+        mock_get_user.return_value = MagicMock()
+        mock_get_features.return_value = SimpleNamespace(
+            classroom_mode=True,
+            classroom_teachers="teacher@cgu.edu",
+            classroom_student_whitelist="student@cgu.edu",
+        )
+
+        with app.test_request_context(
+            "/web/email-code-login",
+            method="POST",
+            json={"email": "other@example.com", "language": "en-US"},
+        ):
+            with pytest.raises(AccountNotWhitelistError):
+                EmailCodeLoginSendEmailApi().post()
+
+        mock_send_email.assert_not_called()
 
 
 class TestEmailCodeLoginApi:

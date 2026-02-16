@@ -102,6 +102,7 @@ class TestEmailCodeLoginSendEmailApi:
         mock_is_ip_limit.return_value = False
         mock_get_user.return_value = None
         mock_get_features.return_value.is_allow_register = True
+        mock_get_features.return_value.classroom_mode = False
         mock_send_email.return_value = "email_token_123"
 
         # Act
@@ -134,12 +135,36 @@ class TestEmailCodeLoginSendEmailApi:
         mock_is_ip_limit.return_value = False
         mock_get_user.return_value = None
         mock_get_features.return_value.is_allow_register = False
+        mock_get_features.return_value.classroom_mode = False
 
         # Act & Assert
         with app.test_request_context("/email-code-login", method="POST", json={"email": "newuser@example.com"}):
             api = EmailCodeLoginSendEmailApi()
             with pytest.raises(AccountNotFound):
                 api.post()
+
+    @patch("controllers.console.wraps.db")
+    @patch("controllers.console.auth.login.AccountService.is_email_send_ip_limit")
+    @patch("controllers.console.auth.login.FeatureService.get_system_features")
+    @patch("controllers.console.auth.login.AccountService.send_email_code_login_email")
+    def test_send_email_code_rejects_non_whitelist_in_classroom_mode(
+        self, mock_send_email, mock_get_features, mock_is_ip_limit, mock_db, app
+    ):
+        """Test classroom mode blocks sending email code to non-whitelisted emails."""
+        from controllers.console.auth.error import AccountNotWhitelistError
+
+        mock_db.session.query.return_value.first.return_value = MagicMock()
+        mock_is_ip_limit.return_value = False
+        mock_get_features.return_value.is_allow_register = True
+        mock_get_features.return_value.classroom_mode = True
+        mock_get_features.return_value.classroom_teachers = "teacher@cgu.edu"
+        mock_get_features.return_value.classroom_student_whitelist = "student@cgu.edu"
+
+        with app.test_request_context("/email-code-login", method="POST", json={"email": "other@example.com"}):
+            with pytest.raises(AccountNotWhitelistError):
+                EmailCodeLoginSendEmailApi().post()
+
+        mock_send_email.assert_not_called()
 
     @patch("controllers.console.wraps.db")
     @patch("controllers.console.auth.login.AccountService.is_email_send_ip_limit")

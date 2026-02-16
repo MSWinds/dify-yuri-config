@@ -235,8 +235,22 @@ class ToolEngine:
     @staticmethod
     def _convert_tool_response_to_str(tool_response: list[ToolInvokeMessage]) -> str:
         """
-        Handle tool response
+        Convert tool invoke messages into a single string for the LLM prompt.
+
+        Used in the Agent path (FC/CoT agent runner) and in plugin tool
+        backwards invocation (workflow/chatflow agent node). Workflow and
+        chatflow tool nodes do not use this; they process messages separately.
+
+        When both TEXT and JSON messages exist, only TEXT is kept (TEXT takes
+        priority) to avoid redundant content that inflates the context window.
+        The final output is truncated to ``MAX_TOOL_OUTPUT_CHARS`` to prevent
+        a single tool call from consuming too much of the context budget.
         """
+        # Hard limit on characters returned to the LLM per tool invocation.
+        # 6000 chars ≈ 1500 tokens — enough to keep 2-3 search results intact
+        # while preventing context explosion on multi-call agent runs.
+        MAX_TOOL_OUTPUT_CHARS = 6000
+
         parts: list[str] = []
         json_parts: list[str] = []
 
@@ -266,12 +280,20 @@ class ToolEngine:
             else:
                 parts.append(str(response.message))
 
-        # Add JSON parts, avoiding duplicates from text parts.
-        if json_parts:
-            existing_parts = set(parts)
-            parts.extend(p for p in json_parts if p not in existing_parts)
+        # Only include JSON when no TEXT output exists (TEXT takes priority).
+        if json_parts and not parts:
+            parts.extend(json_parts)
 
-        return "".join(parts)
+        result = "".join(parts)
+
+        # Truncate oversized tool output to protect the LLM context window.
+        if len(result) > MAX_TOOL_OUTPUT_CHARS:
+            result = result[:MAX_TOOL_OUTPUT_CHARS] + (
+                "\n\n[Output truncated: showing first "
+                f"{MAX_TOOL_OUTPUT_CHARS} of {len(result)} characters]"
+            )
+
+        return result
 
     @staticmethod
     def _extract_tool_response_binary_and_text(

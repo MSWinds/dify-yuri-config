@@ -781,6 +781,10 @@ services:
       <<: *shared-api-worker-env
       # Startup mode, 'worker' starts the Celery worker for processing all queues.
       MODE: worker
+      # Explicitly set queues to include workflow_based_app_execution (required since 1.12.1+Human Input Node).
+      # The image's built-in /entrypoint.sh is outdated and missing this queue,
+      # while the bind-mounted /app/api/docker/entrypoint.sh is not used at runtime.
+      CELERY_QUEUES: "dataset,priority_dataset,priority_pipeline,pipeline,mail,ops_trace,app_deletion,plugin,workflow_storage,conversation,workflow,schedule_poller,schedule_executor,triggered_workflow_dispatcher,trigger_refresh_executor,retention,workflow_based_app_execution"
       SENTRY_DSN: ${API_SENTRY_DSN:-}
       SENTRY_TRACES_SAMPLE_RATE: ${API_SENTRY_TRACES_SAMPLE_RATE:-1.0}
       SENTRY_PROFILES_SAMPLE_RATE: ${API_SENTRY_PROFILES_SAMPLE_RATE:-1.0}

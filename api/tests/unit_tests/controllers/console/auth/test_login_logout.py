@@ -181,6 +181,7 @@ class TestLoginApi:
 
     @patch("controllers.console.wraps.db")
     @patch("controllers.console.auth.login.dify_config.BILLING_ENABLED", False)
+    @patch("controllers.console.auth.login.dify_config.LOGIN_LOCKOUT_DURATION", 300)
     @patch("controllers.console.auth.login.AccountService.is_login_error_rate_limit")
     @patch("controllers.console.auth.login.RegisterService.get_invitation_with_case_fallback")
     def test_login_fails_when_rate_limited(self, mock_get_invitation, mock_is_rate_limit, mock_db, app):
@@ -201,8 +202,9 @@ class TestLoginApi:
             "/login", method="POST", json={"email": "test@example.com", "password": encode_password("password")}
         ):
             login_api = LoginApi()
-            with pytest.raises(EmailPasswordLoginLimitError):
+            with pytest.raises(EmailPasswordLoginLimitError) as exc_info:
                 login_api.post()
+        assert exc_info.value.description == "Too many incorrect password attempts. Please try again in 5 minutes."
 
     @patch("controllers.console.wraps.db")
     @patch("controllers.console.auth.login.dify_config.BILLING_ENABLED", True)

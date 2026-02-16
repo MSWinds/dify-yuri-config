@@ -85,8 +85,12 @@ class AuthenticationFailedError(BaseHTTPException):
 
 class EmailPasswordLoginLimitError(BaseHTTPException):
     error_code = "email_code_login_limit"
-    description = "Too many incorrect password attempts. Please try again later."
+    description = "Too many incorrect password attempts. Please try again in {minutes} minutes."
     code = 429
+
+    def __init__(self, minutes: int = 5):
+        description = self.description.format(minutes=int(minutes)) if self.description else None
+        super().__init__(description=description)
 
 
 class EmailCodeLoginRateLimitExceededError(BaseHTTPException):

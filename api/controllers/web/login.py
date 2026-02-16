@@ -7,6 +7,7 @@ import services
 from configs import dify_config
 from controllers.common.schema import register_schema_models
 from controllers.console.auth.error import (
+    AccountNotWhitelistError,
     AuthenticationFailedError,
     EmailCodeError,
     InvalidEmailError,
@@ -29,6 +30,7 @@ from libs.token import (
 )
 from services.account_service import AccountService
 from services.app_service import AppService
+from services.feature_service import FeatureService
 from services.webapp_auth_service import WebAppAuthService
 
 
@@ -177,11 +179,23 @@ class EmailCodeLoginSendEmailApi(Resource):
     )
     def post(self):
         payload = EmailCodeLoginSendPayload.model_validate(web_ns.payload or {})
+        system_features = FeatureService.get_system_features()
+        normalized_email = payload.email.lower()
 
         if payload.language == "zh-Hans":
             language = "zh-Hans"
         else:
             language = "en-US"
+
+        if system_features.classroom_mode:
+            allowed_list: list[str] = []
+            if system_features.classroom_teachers:
+                allowed_list.extend([e.strip() for e in system_features.classroom_teachers.split(",")])
+            if system_features.classroom_student_whitelist:
+                allowed_list.extend([e.strip() for e in system_features.classroom_student_whitelist.split(",")])
+
+            if normalized_email not in [e.lower() for e in allowed_list]:
+                raise AccountNotWhitelistError()
 
         account = WebAppAuthService.get_user_through_email(payload.email)
         if account is None:

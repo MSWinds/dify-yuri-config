@@ -1,3 +1,4 @@
+from math import ceil
 from typing import Any
 
 import flask_login
@@ -10,6 +11,7 @@ from configs import dify_config
 from constants.languages import get_valid_language
 from controllers.console import console_ns
 from controllers.console.auth.error import (
+    AccountNotWhitelistError,
     AuthenticationFailedError,
     EmailCodeError,
     EmailPasswordLoginLimitError,
@@ -98,7 +100,7 @@ class LoginApi(Resource):
 
         is_login_error_rate_limit = AccountService.is_login_error_rate_limit(normalized_email)
         if is_login_error_rate_limit:
-            raise EmailPasswordLoginLimitError()
+            raise EmailPasswordLoginLimitError(minutes=max(1, ceil(dify_config.LOGIN_LOCKOUT_DURATION / 60)))
 
         invite_token = args.invite_token
         invitation_data: dict[str, Any] | None = None
@@ -204,6 +206,7 @@ class EmailCodeLoginSendEmailApi(Resource):
     def post(self):
         args = EmailPayload.model_validate(console_ns.payload)
         normalized_email = args.email.lower()
+        system_features = FeatureService.get_system_features()
 
         ip_address = extract_remote_ip(request)
         if AccountService.is_email_send_ip_limit(ip_address):
@@ -213,13 +216,24 @@ class EmailCodeLoginSendEmailApi(Resource):
             language = "zh-Hans"
         else:
             language = "en-US"
+
+        if system_features.classroom_mode:
+            allowed_list: list[str] = []
+            if system_features.classroom_teachers:
+                allowed_list.extend([e.strip() for e in system_features.classroom_teachers.split(",")])
+            if system_features.classroom_student_whitelist:
+                allowed_list.extend([e.strip() for e in system_features.classroom_student_whitelist.split(",")])
+
+            if normalized_email not in [e.lower() for e in allowed_list]:
+                raise AccountNotWhitelistError()
+
         try:
             account = _get_account_with_case_fallback(args.email)
         except AccountRegisterError:
             raise AccountInFreezeError()
 
         if account is None:
-            if FeatureService.get_system_features().is_allow_register:
+            if system_features.is_allow_register:
                 token = AccountService.send_email_code_login_email(email=normalized_email, language=language)
             else:
                 raise AccountNotFound()

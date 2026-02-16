@@ -1,7 +1,9 @@
 #!/bin/bash
 
 HTTPS_CONFIG=''
-HTTP_TO_HTTPS_REDIRECT=''
+NGINX_REDIRECT_CONF=''
+# When HTTPS is enabled with redirect, the main server only listens on SSL.
+# When HTTPS is disabled, the main server listens on the HTTP port.
 LISTEN_DIRECTIVE="listen ${NGINX_PORT};"
 
 if [ "${NGINX_HTTPS_ENABLED}" = "true" ]; then
@@ -24,14 +26,14 @@ if [ "${NGINX_HTTPS_ENABLED}" = "true" ]; then
     # Substitute the HTTPS_CONFIG in the default.conf.template with content from https.conf.template
     envsubst '${HTTPS_CONFIG}' < /etc/nginx/conf.d/default.conf.template > /etc/nginx/conf.d/default.conf
 
-    # Build the HTTP -> HTTPS redirect server block from template
-    HTTP_TO_HTTPS_REDIRECT=$(envsubst '${NGINX_PORT} ${NGINX_SERVER_NAME}' < /etc/nginx/redirect.conf.template)
+    # Generate HTTP -> HTTPS redirect config as a separate file (avoids multiline env var issues)
+    envsubst '${NGINX_PORT} ${NGINX_SERVER_NAME}' < /etc/nginx/redirect.conf.template > /etc/nginx/conf.d/redirect.conf
 
-    # Main server block only listens on HTTPS when redirect is enabled
-    LISTEN_DIRECTIVE="listen ${NGINX_SSL_PORT} ssl;"
+    # When redirect is enabled, remove the HTTP listen from the main server block.
+    # The SSL listen directive comes from HTTPS_CONFIG (https.conf.template).
+    LISTEN_DIRECTIVE=""
 fi
 export HTTPS_CONFIG
-export HTTP_TO_HTTPS_REDIRECT
 export LISTEN_DIRECTIVE
 
 if [ "${NGINX_ENABLE_CERTBOT_CHALLENGE}" = "true" ]; then

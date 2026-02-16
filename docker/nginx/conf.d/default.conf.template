@@ -1,9 +1,5 @@
 # Please do not directly edit this file. Instead, modify the .env variables related to NGINX configuration.
 
-# When HTTPS is enabled, this block redirects all HTTP traffic to HTTPS.
-# When HTTPS is disabled, this block is empty and the main server handles HTTP directly.
-${HTTP_TO_HTTPS_REDIRECT}
-
 server {
     ${LISTEN_DIRECTIVE}
     server_name ${NGINX_SERVER_NAME};

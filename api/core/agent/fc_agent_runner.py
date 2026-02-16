@@ -57,6 +57,13 @@ class FunctionCallAgentRunner(BaseAgentRunner):
         final_answer = ""
         prompt_messages: list = []  # Initialize prompt_messages
 
+        # Dead-loop detection: count consecutive iterations where the LLM
+        # produces neither a valid tool call nor a substantive text answer.
+        # When this counter reaches the threshold the agent breaks out of
+        # the loop and returns whatever partial answer has been accumulated.
+        _consecutive_empty_replies = 0
+        _MAX_EMPTY_REPLIES = 3  # bail out after 3 fruitless iterations
+
         # get tracing instance
         trace_manager = app_generate_entity.trace_manager
 
@@ -221,6 +228,24 @@ class FunctionCallAgentRunner(BaseAgentRunner):
 
             final_answer += response + "\n"
 
+            # Dead-loop detection: if the LLM produced no tool calls and the
+            # text response is trivially short (< 50 chars), it is likely
+            # stuck in a reasoning loop (e.g. "Ok.", "Let's do it.").
+            # After ``_MAX_EMPTY_REPLIES`` consecutive such iterations we
+            # break out and return the accumulated answer.
+            if not tool_calls and len(response.strip()) < 50:
+                _consecutive_empty_replies += 1
+                if _consecutive_empty_replies >= _MAX_EMPTY_REPLIES:
+                    logger.warning(
+                        "FC agent dead-loop detected: %d consecutive trivial replies without tool calls. "
+                        "Breaking out. Last response: %r",
+                        _consecutive_empty_replies,
+                        response[:200],
+                    )
+                    break
+            else:
+                _consecutive_empty_replies = 0
+
             # Check if max iteration is reached and model still wants to call tools
             if iteration_step == max_iteration_steps and tool_calls:
                 raise AgentMaxIterationError(app_config.agent.max_iteration)
@@ -345,7 +370,17 @@ class FunctionCallAgentRunner(BaseAgentRunner):
         for prompt_message in llm_result_chunk.delta.message.tool_calls:
             args = {}
             if prompt_message.function.arguments != "":
-                args = json.loads(prompt_message.function.arguments)
+                try:
+                    args = json.loads(prompt_message.function.arguments)
+                except (json.JSONDecodeError, TypeError):
+                    logger.warning(
+                        "Failed to parse tool call arguments for %s: %r",
+                        prompt_message.function.name,
+                        prompt_message.function.arguments[:200],
+                    )
+                    # Pass raw string as a single argument so the tool can
+                    # still attempt to handle it or return a clear error.
+                    args = {"__raw_arguments__": prompt_message.function.arguments}
 
             tool_calls.append(
                 (
@@ -368,7 +403,15 @@ class FunctionCallAgentRunner(BaseAgentRunner):
         for prompt_message in llm_result.message.tool_calls:
             args = {}
             if prompt_message.function.arguments != "":
-                args = json.loads(prompt_message.function.arguments)
+                try:
+                    args = json.loads(prompt_message.function.arguments)
+                except (json.JSONDecodeError, TypeError):
+                    logger.warning(
+                        "Failed to parse blocking tool call arguments for %s: %r",
+                        prompt_message.function.name,
+                        prompt_message.function.arguments[:200],
+                    )
+                    args = {"__raw_arguments__": prompt_message.function.arguments}
 
             tool_calls.append(
                 (
