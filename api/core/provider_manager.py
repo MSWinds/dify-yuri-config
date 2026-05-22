@@ -305,8 +305,15 @@ class ProviderManager:
             available_models = provider_configurations.get_models(model_type=model_type, only_active=True)
 
             if available_models:
+                preferred_model_names = ("gpt-5-mini", "gpt-4")
                 available_model = next(
-                    (model for model in available_models if model.model == "gpt-4"), available_models[0]
+                    (
+                        model
+                        for preferred_name in preferred_model_names
+                        for model in available_models
+                        if model.model == preferred_name
+                    ),
+                    available_models[0],
                 )
 
                 default_model = TenantDefaultModel(

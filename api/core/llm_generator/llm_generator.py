@@ -7,6 +7,7 @@ from typing import Protocol, cast
 import json_repair
 
 from core.app.app_config.entities import ModelConfig
+from core.errors.error import ProviderTokenNotInitError
 from core.llm_generator.entities import RuleCodeGeneratePayload, RuleGeneratePayload, RuleStructuredOutputPayload
 from core.llm_generator.output_parser.rule_config_generator import RuleConfigGeneratorOutputParser
 from core.llm_generator.output_parser.suggested_questions_after_answer import SuggestedQuestionsAfterAnswerOutputParser
@@ -31,6 +32,7 @@ from core.ops.entities.trace_entity import TraceTaskName
 from core.ops.ops_trace_manager import TraceQueueManager, TraceTask
 from core.ops.utils import measure_time
 from core.prompt.utils.prompt_template_parser import PromptTemplateParser
+from core.provider_manager import ProviderManager
 from core.workflow.entities.workflow_node_execution import WorkflowNodeExecutionMetadataKey
 from extensions.ext_database import db
 from extensions.ext_storage import storage
@@ -49,6 +51,80 @@ class WorkflowServiceInterface(Protocol):
 
 
 class LLMGenerator:
+    INTERNAL_GENERATOR_PREFERRED_MODELS = ("gpt-5-mini", "gpt-4")
+
+    @classmethod
+    def _get_internal_generator_model_instances(cls, tenant_id: str):
+        model_manager = ModelManager()
+        provider_manager = ProviderManager()
+        provider_configurations = provider_manager.get_configurations(tenant_id)
+        available_models = provider_configurations.get_models(model_type=ModelType.LLM, only_active=True)
+
+        preferred_provider_models: list[tuple[str, str]] = []
+        for preferred_name in cls.INTERNAL_GENERATOR_PREFERRED_MODELS:
+            matched_model = next((model for model in available_models if model.model == preferred_name), None)
+            if matched_model:
+                preferred_provider_models.append((matched_model.provider.provider, matched_model.model))
+
+        model_instances = []
+        seen: set[tuple[str, str]] = set()
+        for provider, model in preferred_provider_models:
+            key = (provider, model)
+            if key in seen:
+                continue
+            seen.add(key)
+            try:
+                model_instances.append(
+                    model_manager.get_model_instance(
+                        tenant_id=tenant_id,
+                        model_type=ModelType.LLM,
+                        provider=provider,
+                        model=model,
+                    )
+                )
+            except Exception:
+                logger.warning("Skip internal generator model %s/%s due to initialization error", provider, model)
+
+        default_model_instance = model_manager.get_default_model_instance(tenant_id=tenant_id, model_type=ModelType.LLM)
+        default_key = (default_model_instance.provider, default_model_instance.model)
+        if default_key not in seen:
+            model_instances.append(default_model_instance)
+
+        if not model_instances:
+            raise ProviderTokenNotInitError("No available LLM model for internal generator.")
+
+        return model_instances
+
+    @classmethod
+    def _invoke_llm_with_internal_fallback(
+        cls,
+        tenant_id: str,
+        prompt_messages: Sequence[PromptMessage],
+        model_parameters: dict | None = None,
+    ) -> LLMResult:
+        last_error: InvokeError | None = None
+
+        for model_instance in cls._get_internal_generator_model_instances(tenant_id):
+            try:
+                response: LLMResult = model_instance.invoke_llm(
+                    prompt_messages=list(prompt_messages),
+                    model_parameters=model_parameters,
+                    stream=False,
+                )
+                return response
+            except InvokeError as e:
+                last_error = e
+                logger.warning(
+                    "Internal generator invoke failed on model %s/%s, try fallback",
+                    model_instance.provider,
+                    model_instance.model,
+                )
+
+        if last_error:
+            raise last_error
+
+        raise ProviderTokenNotInitError("No available LLM model for internal generator.")
+
     @classmethod
     def generate_conversation_name(
         cls, tenant_id: str, query, conversation_id: str | None = None, app_id: str | None = None
@@ -62,16 +138,13 @@ class LLMGenerator:
 
         prompt += query + "\n"
 
-        model_manager = ModelManager()
-        model_instance = model_manager.get_default_model_instance(
-            tenant_id=tenant_id,
-            model_type=ModelType.LLM,
-        )
         prompts = [UserPromptMessage(content=prompt)]
 
         with measure_time() as timer:
-            response: LLMResult = model_instance.invoke_llm(
-                prompt_messages=list(prompts), model_parameters={"max_tokens": 500, "temperature": 1}, stream=False
+            response: LLMResult = cls._invoke_llm_with_internal_fallback(
+                tenant_id=tenant_id,
+                prompt_messages=prompts,
+                model_parameters={"max_tokens": 500, "temperature": 1},
             )
         answer = response.message.get_text_content()
         if answer == "":
@@ -120,28 +193,20 @@ class LLMGenerator:
         prompt = prompt_template.format({"histories": histories, "format_instructions": format_instructions})
 
         try:
-            model_manager = ModelManager()
-            model_instance = model_manager.get_default_model_instance(
+            response: LLMResult = cls._invoke_llm_with_internal_fallback(
                 tenant_id=tenant_id,
-                model_type=ModelType.LLM,
-            )
-        except InvokeAuthorizationError:
-            return []
-
-        prompt_messages = [UserPromptMessage(content=prompt)]
-
-        questions: Sequence[str] = []
-
-        try:
-            response: LLMResult = model_instance.invoke_llm(
-                prompt_messages=list(prompt_messages),
+                prompt_messages=[UserPromptMessage(content=prompt)],
                 model_parameters={
                     "max_tokens": SUGGESTED_QUESTIONS_MAX_TOKENS,
                     "temperature": SUGGESTED_QUESTIONS_TEMPERATURE,
                 },
-                stream=False,
             )
+        except (InvokeAuthorizationError, ProviderTokenNotInitError):
+            return []
 
+        questions: Sequence[str] = []
+
+        try:
             text_content = response.message.get_text_content()
             questions = output_parser.parse(text_content) if text_content else []
         except InvokeError:
@@ -335,25 +400,13 @@ class LLMGenerator:
     def generate_qa_document(cls, tenant_id: str, query, document_language: str):
         prompt = GENERATOR_QA_PROMPT.format(language=document_language)
 
-        model_manager = ModelManager()
-        model_instance = model_manager.get_default_model_instance(
-            tenant_id=tenant_id,
-            model_type=ModelType.LLM,
-        )
-
         prompt_messages: list[PromptMessage] = [SystemPromptMessage(content=prompt), UserPromptMessage(content=query)]
 
-        # Explicitly use the non-streaming overload
-        result = model_instance.invoke_llm(
+        response = cls._invoke_llm_with_internal_fallback(
+            tenant_id=tenant_id,
             prompt_messages=prompt_messages,
             model_parameters={"temperature": 0.01, "max_tokens": 2000},
-            stream=False,
         )
-
-        # Runtime type check since pyright has issues with the overload
-        if not isinstance(result, LLMResult):
-            raise TypeError("Expected LLMResult when stream=False")
-        response = result
 
         answer = response.message.get_text_content()
         return answer.strip()

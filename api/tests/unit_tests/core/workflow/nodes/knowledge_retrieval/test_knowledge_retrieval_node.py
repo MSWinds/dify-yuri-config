@@ -10,7 +10,9 @@ from core.variables import StringSegment
 from core.workflow.entities import GraphInitParams
 from core.workflow.enums import WorkflowNodeExecutionStatus
 from core.workflow.nodes.knowledge_retrieval.entities import (
+    Condition,
     KnowledgeRetrievalNodeData,
+    MetadataFilteringCondition,
     MultipleRetrievalConfig,
     RerankingModelConfig,
     SingleRetrievalConfig,
@@ -585,6 +587,54 @@ class TestFetchDatasetRetriever:
         call_args = mock_rag_retrieval.knowledge_retrieval.call_args
         request = call_args[1]["request"]
         assert request.reranking_enable is False
+
+    def test_fetch_dataset_retriever_resolves_metadata_filter_variables(
+        self,
+        mock_graph_init_params,
+        mock_graph_runtime_state,
+        mock_rag_retrieval,
+        sample_node_data,
+    ):
+        """Metadata filter runtime variables should be resolved before retrieval dispatch."""
+        query = "search cisat office hours"
+        variables = {"query": query}
+
+        mock_graph_runtime_state.variable_pool.add(["start", "CISAT"], StringSegment(value="CISAT"))
+        sample_node_data.metadata_filtering_mode = "manual"
+        sample_node_data.metadata_filtering_conditions = MetadataFilteringCondition(
+            logical_operator="and",
+            conditions=[
+                Condition(
+                    name="department_name",
+                    comparison_operator="is",
+                    value="{{#start.CISAT#}}",
+                )
+            ],
+        )
+
+        mock_rag_retrieval.knowledge_retrieval.return_value = []
+        mock_rag_retrieval.llm_usage = LLMUsage.empty_usage()
+
+        node_id = str(uuid.uuid4())
+        config = {
+            "id": node_id,
+            "data": sample_node_data.model_dump(),
+        }
+
+        node = KnowledgeRetrievalNode(
+            id=node_id,
+            config=config,
+            graph_init_params=mock_graph_init_params,
+            graph_runtime_state=mock_graph_runtime_state,
+            rag_retrieval=mock_rag_retrieval,
+        )
+
+        node._fetch_dataset_retriever(node_data=sample_node_data, variables=variables)
+
+        request = mock_rag_retrieval.knowledge_retrieval.call_args.kwargs["request"]
+        assert request.metadata_filtering_conditions is not None
+        assert request.metadata_filtering_conditions.conditions is not None
+        assert request.metadata_filtering_conditions.conditions[0].value == "CISAT"
 
     def test_version_method(self):
         """Test version class method."""

@@ -1,4 +1,5 @@
 import logging
+import re
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -24,6 +25,7 @@ from core.workflow.nodes.llm.file_saver import FileSaverImpl, LLMFileSaver
 from core.workflow.repositories.rag_retrieval_protocol import KnowledgeRetrievalRequest, RAGRetrievalProtocol, Source
 
 from .entities import KnowledgeRetrievalNodeData
+from .entities import MetadataFilteringCondition
 from .exc import (
     KnowledgeRetrievalNodeError,
     RateLimitExceededError,
@@ -168,6 +170,9 @@ class KnowledgeRetrievalNode(LLMUsageTrackingMixin, Node[KnowledgeRetrievalNodeD
         metadata_filtering_mode: Literal["disabled", "automatic", "manual"] = "disabled"
         if node_data.metadata_filtering_mode is not None:
             metadata_filtering_mode = node_data.metadata_filtering_mode
+        metadata_filtering_conditions = self._resolve_metadata_filtering_conditions(
+            node_data.metadata_filtering_conditions
+        )
 
         if str(node_data.retrieval_mode) == DatasetRetrieveConfigEntity.RetrieveStrategy.SINGLE and query:
             # fetch model config
@@ -187,7 +192,7 @@ class KnowledgeRetrievalNode(LLMUsageTrackingMixin, Node[KnowledgeRetrievalNodeD
                     model_mode=model.mode,
                     model_name=model.name,
                     metadata_model_config=node_data.metadata_model_config,
-                    metadata_filtering_conditions=node_data.metadata_filtering_conditions,
+                    metadata_filtering_conditions=metadata_filtering_conditions,
                     metadata_filtering_mode=metadata_filtering_mode,
                     query=query,
                 )
@@ -245,7 +250,7 @@ class KnowledgeRetrievalNode(LLMUsageTrackingMixin, Node[KnowledgeRetrievalNodeD
                     weights=weights,
                     reranking_enable=node_data.multiple_retrieval_config.reranking_enable,
                     metadata_model_config=node_data.metadata_model_config,
-                    metadata_filtering_conditions=node_data.metadata_filtering_conditions,
+                    metadata_filtering_conditions=metadata_filtering_conditions,
                     metadata_filtering_mode=metadata_filtering_mode,
                     attachment_ids=[attachment.related_id for attachment in attachments] if attachments else None,
                 )
@@ -253,6 +258,35 @@ class KnowledgeRetrievalNode(LLMUsageTrackingMixin, Node[KnowledgeRetrievalNodeD
 
         usage = self._rag_retrieval.llm_usage
         return retrieval_resource_list, usage
+
+    def _resolve_metadata_filtering_conditions(
+        self, conditions: MetadataFilteringCondition | None
+    ) -> MetadataFilteringCondition | None:
+        """Resolve runtime templates before metadata filters reach retrieval services."""
+
+        if conditions is None or not conditions.conditions:
+            return conditions
+
+        resolved_conditions = []
+        for condition in conditions.conditions:
+            value = condition.value
+            if isinstance(value, str) and condition.comparison_operator not in {"empty", "not empty"}:
+                value = self._resolve_metadata_filter_value(value)
+            resolved_conditions.append(condition.model_copy(update={"value": value}))
+
+        return conditions.model_copy(update={"conditions": resolved_conditions})
+
+    def _resolve_metadata_filter_value(self, value: str) -> str | int | float:
+        resolved = self.graph_runtime_state.variable_pool.convert_template(value)
+        if not resolved.value:
+            return ""
+
+        segment = resolved.value[0]
+        if segment.value_type.value in {"number", "integer", "float"}:
+            return segment.value
+        if segment.value_type.value == "string":
+            return re.sub(r"[\r\n\t]+", " ", segment.text).strip()
+        return segment.to_object()
 
     @classmethod
     def _extract_variable_selector_to_variable_mapping(
